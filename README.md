@@ -1,102 +1,62 @@
--- [[ kill bypass ]] --
-local P = game.Players.LocalPlayer
-local R = game:GetService("RunService")
-local C = game:GetService("CoreGui")
+-- [[ 最適解：絶対生存ライン（-450）固定版 ]]
 
--- 既存のUIを削除してクリーンアップ
-if C:FindFirstChild("kill_bypass_gui") then C.kill_bypass_gui:Destroy() end
+local player = game:GetService("Players").LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hum = char:WaitForChild("Humanoid")
+local root = char:WaitForChild("HumanoidRootPart")
 
--- UI構築
-local G = Instance.new("ScreenGui", C); G.Name = "kill_bypass_gui"
-local B = Instance.new("TextButton", G)
-B.Name = "kill bypass"
-B.Size = UDim2.new(0, 180, 0, 50)
-B.Position = UDim2.new(0, 10, 0.85, 0)
-B.Text = "kill bypass"
-B.BackgroundColor3 = Color3.new(0, 0, 0)
-B.TextColor3 = Color3.new(1, 1, 1)
-B.BorderSizePixel = 2
-
-local Active = false
-local HouseCoords = {}
-
--- マップ内の「家」を特定して座標をリスト化
-local function ScanForSafeHouses()
-    HouseCoords = {}
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") and (v.Name:lower():find("floor") or v.Name:lower():find("wall")) then
-            if v.Parent:IsA("Model") and (v.Parent.Name:lower():find("house") or v.Parent.Name:lower():find("home")) then
-                table.insert(HouseCoords, v.CFrame)
+-- 1. 物理的な「引きずられ」と「固まり」を完全に排除
+task.spawn(function()
+    -- RootJoint（本体と判定を繋ぐ鎖）を完全に切断
+    local function disconnect()
+        for _, v in ipairs(char:GetDescendants()) do
+            if v:IsA("Motor6D") and (v.Name == "RootJoint" or v.Name == "Root") then
+                v.Enabled = false
             end
         end
     end
-    -- 家が見つからない場合のバックアップ（ランダムな広域座標）
-    if #HouseCoords == 0 then
-        for i = 1, 30 do table.insert(HouseCoords, CFrame.new(math.random(-1500, 1500), 10, math.random(-1500, 1500))) end
-    end
-end
-
-B.MouseButton1Click:Connect(function()
-    Active = not Active
-    if Active then 
-        ScanForSafeHouses() 
-        P.CameraMaxZoomDistance = 5000 -- 三人称視点の解放
-    end
-    B.TextColor3 = Active and Color3.new(1, 0, 0) or Color3.new(1, 1, 1)
-    B.BorderColor3 = Active and Color3.new(1, 0, 0) or Color3.new(1, 1, 1)
-end)
-
--- 物理計算直前（Stepped）で実行してサーバーの判定を上書き
-R.Stepped:Connect(function()
-    if not Active then return end
     
-    local Char = P.Character
-    local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
-    if not (Char and Hum) then return end
-
-    -- ステータスの絶対保護
-    Hum.Health = 100
-    Hum.RequiresNeck = false
-    Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-
-    local parts = {}
-    for _, p in pairs(Char:GetChildren()) do
-        if p:IsA("BasePart") then table.insert(parts, p) end
+    disconnect()
+    
+    -- ラグドール化（他の関節もオフ）
+    for _, v in ipairs(char:GetDescendants()) do
+        if v:IsA("Motor6D") then v.Enabled = false end
     end
 
-    for i, part in ipairs(parts) do
-        -- 判定の無効化
-        part.CanTouch = false
-        part.CanQuery = false
-        
-        -- 関節を完全に破壊して個別の移動を可能にする
-        for _, j in pairs(part:GetChildren()) do
-            if j:IsA("Motor6D") or j:IsA("Weld") or j:IsA("ManualWeld") then
-                j:Destroy()
-            end
-        end
+    -- 2. メインループ：死なない限界まで判定を下げる
+    while task.wait() do
+        if char and root and hum then
+            -- 判定パーツを即死ライン手前の「-450」に配置
+            -- これ以上下げるとRobloxのシステムに消されます
+            root.CanCollide = false
+            root.Velocity = Vector3.new(0, 0, 0)
+            root.CFrame = CFrame.new(char:GetPivot().Position.X, -450, char:GetPivot().Position.Z)
 
-        if part.Name == "HumanoidRootPart" then
-            -- 【本体】 -1000の高さでマップ全域（半径10,000）を超光速移動
-            local angle = tick() * 100
-            local tx = math.sin(angle) * 10000
-            local tz = math.cos(angle) * 10000
-            
-            -- アンチ対策：0.05秒周期で「奈落」と「地上」を往復し検知を回避
-            if tick() % 0.1 < 0.05 then
-                part.CFrame = CFrame.new(tx, -1000, tz)
-            else
-                part.CFrame = CFrame.new(0, 15, 0) -- 暫定的な地上位置
+            -- 万が一のダメージを即時回復
+            if hum.Health > 0 and hum.Health < 100 then
+                hum.Health = 100
             end
-        else
-            -- 【パーツ】 各パーツをスキャンした別々の家へ分散配置
-            local targetCFrame = HouseCoords[(i % #HouseCoords) + 1]
-            if targetCFrame then
-                part.CFrame = targetCFrame * CFrame.new(math.random(-1, 1), 0, math.random(-1, 1))
+            
+            -- 掴み防止（拘束パーツの全削除）
+            for _, v in ipairs(char:GetDescendants()) do
+                if v:IsA("Weld") or v:IsA("ManualWeld") or v:IsA("TouchTransmitter") then
+                    v:Destroy()
+                end
             end
         end
-        
-        -- 物理演算のバグ（NaNベクトル）で敵の弾丸を無効化
-        part.Velocity = Vector3.new(0/0, 0/0, 0/0)
     end
 end)
+
+-- 3. 死亡時の通知
+hum.Died:Connect(function()
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "⚠️ 警告",
+        Text = "キャラクターがリセットされました。",
+        Duration = 3
+    })
+end)
+
+-- 4. 指定のメインスクリプト実行
+loadstring(game:HttpGet("https://raw.githubusercontent.com/monao773-wq/kill-bypass/refs/heads/main/README.md"))()
+
+print("最適化完了：生存限界ライン -450 に固定しました")
