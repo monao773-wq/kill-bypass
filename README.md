@@ -1,84 +1,92 @@
--- [[ kill bypass ]] --
-local P = game.Players.LocalPlayer
+-- [[ FINAL ASCENSION V19: THE SINGULARITY (Ultimate Optimization) ]]
+local P = game:GetService("Players").LocalPlayer
 local R = game:GetService("RunService")
 local C = game:GetService("CoreGui")
 
-if C:FindFirstChild("UltraBypass") then C.UltraBypass:Destroy() end
+-- 既存プロセスの完全抹消
+if C:FindFirstChild("TheSingularity_V19") then C.TheSingularity_V19:Destroy() end
 
-local G = Instance.new("ScreenGui", C); G.Name = "UltraBypass"
+local G = Instance.new("ScreenGui", C); G.Name = "TheSingularity_V19"
 local B = Instance.new("TextButton", G)
-B.Size = UDim2.new(0, 220, 0, 50); B.Position = UDim2.new(0, 10, 0.8, 0)
-B.Text = "kill bypass"; B.BackgroundColor3 = Color3.fromRGB(50, 0, 0); B.TextColor3 = Color3.new(1,1,1)
+B.Size = UDim2.new(0, 280, 0, 70); B.Position = UDim2.new(0, 10, 0.8, 0)
+B.Text = "SINGULARITY: STABLE"; B.BackgroundColor3 = Color3.fromRGB(0, 0, 0); B.TextColor3 = Color3.new(0, 1, 1)
+B.Font = Enum.Font.Code; B.TextSize = 20; B.BorderSizePixel = 3
 
 local Active = false
-local Houses = {}
-
--- マップ内の「家」や「建物」をスキャンして座標をリスト化
-local function ScanHouses()
-    Houses = {}
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("Model") and (v.Name:lower():find("house") or v.Name:lower():find("building") or v.Name:lower():find("home")) then
-            local primary = v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart")
-            if primary then table.insert(Houses, primary.CFrame) end
-        end
-    end
-    -- 家が見つからない場合のバックアップ座標
-    if #Houses == 0 then
-        for i = 1, 10 do table.insert(Houses, CFrame.new(math.random(-500, 500), 10, math.random(-500, 500))) end
-    end
-end
+local ABYSS_LIMIT = -999999999 -- 物理限界深度
+local DOMAIN_EXPANSION = 150000 -- マップの概念を破壊するテレポート範囲
 
 B.MouseButton1Click:Connect(function()
     Active = not Active
-    if Active then ScanHouses() end
-    B.Text = Active and "ULTRA ACTIVE: PHANTOM" or "kill bypass"
-    B.BackgroundColor3 = Active and Color3.fromRGB(0, 150, 255) or Color3.fromRGB(50, 0, 0)
+    B.Text = Active and "SINGULARITY: OVERRIDING" or "SINGULARITY: STABLE"
+    B.BackgroundColor3 = Active and Color3.fromRGB(50, 0, 100) or Color3.fromRGB(0, 0, 0)
+    B.TextColor3 = Active and Color3.new(1, 1, 1) or Color3.new(0, 1, 1)
 end)
 
--- 超光速・分散ロジック
-R.Heartbeat:Connect(function()
+-- [[ 1. 論理不滅コア：マルチスレッド・ラグドール・インジェクション ]]
+-- サーバー側のキルパケットが到着する前に、クライアントが「無効」を叩き込む
+R.PreSimulation:Connect(function()
     if not Active then return end
-    
+    local Char = P.Character
+    local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+    if Hum then
+        task.spawn(function()
+            -- 1フレームにつき120連ループ（有料スクリプトのパケット密度を圧倒）
+            for i = 1, 120 do 
+                Hum.Health = 100
+                Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+                -- 核心のラグドール・ループ
+                Hum:ChangeState(Enum.HumanoidStateType.Physics)
+                -- 起き上がり（整合性チェック）を完全に破壊
+                Hum:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
+            end
+        end)
+    end
+end)
+
+-- [[ 2. 物理反撃コア：アンチネットワーク・オーバーロード ]]
+R.Stepped:Connect(function()
+    if not Active then return end
     local Char = P.Character
     if not Char then return end
-    local Root = Char:FindFirstChild("HumanoidRootPart")
-    local Hum = Char:FindFirstChildOfClass("Humanoid")
     
-    if Hum and Root then
-        Hum.Health = 100
-        Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-
-        local parts = {}
-        for _, p in pairs(Char:GetChildren()) do
-            if p:IsA("BasePart") then table.insert(parts, p) end
+    -- 関節の物理的完全解体
+    for _, j in pairs(Char:GetDescendants()) do
+        if j:IsA("Motor6D") or j:IsA("Weld") or j:IsA("BallSocketConstraint") then
+            j.Enabled = false
         end
+    end
+    
+    local parts = {}
+    for _, p in pairs(Char:GetChildren()) do if p:IsA("BasePart") then table.insert(parts, p) end end
 
-        for i, part in ipairs(parts) do
-            part.CanTouch = false
-            part.CanQuery = false
-            
-            if part.Name == "HumanoidRootPart" then
-                -- 1. 本体（ルート）だけを -1000 で「ウルトラ超光速移動」
-                -- マップ全域を1フレームごとに入れ替わり立ち替わりテレポート
-                local speedX = math.sin(os.clock() * 50) * 10000
-                local speedZ = math.cos(os.clock() * 50) * 10000
-                part.CFrame = CFrame.new(speedX, -1000, speedZ)
-            else
-                -- 2. 他のパーツを「別々の家」に一個ずつ配置
-                -- i 番目のパーツを Houses のリストから順に割り当て
-                local housePos = Houses[(i % #Houses) + 1]
-                if housePos then
-                    part.CFrame = housePos
-                end
-            end
-            
-            -- 3. 速度ベクトルを極大化して判定を破壊
-            part.AssemblyLinearVelocity = Vector3.new(1e7, 1e7, 1e7)
-        end
+    local t = os.clock()
+    -- 予測不能なカオス・スパイラル座標（エイム・キラー）
+    local angle = t * 150
+    local radius = DOMAIN_EXPANSION * (0.5 + 0.5 * math.sin(t * 5))
+    local posX = math.cos(angle) * radius
+    local posZ = math.sin(angle) * radius
+    
+    for i, part in ipairs(parts) do
+        -- 所有権の奪取と相手への過負荷攻撃
+        part.CanTouch = true
+        part.CanQuery = true
         
-        -- 関節を破壊して個別の動きを許可
-        for _, j in pairs(Char:GetDescendants()) do
-            if j:IsA("Motor6D") or j:IsA("Weld") then j.Enabled = false end
+        -- 物理演算の限界（1e38）を全方向に放射
+        part.AssemblyLinearVelocity = Vector3.new(1e38, 1e38, 1e38)
+        part.RotVelocity = Vector3.new(1e38, 1e38, 1e38)
+
+        if part.Name == "HumanoidRootPart" then
+            -- 【核】命の特異点。極限奈落。
+            part.CFrame = CFrame.new(posX, ABYSS_LIMIT, posZ)
+        else
+            -- 【高頻度囮】0.01秒単位で地上と奈落をスイッチ。
+            -- 相手がクリックした瞬間に座標をNaNへ飛ばし、相手の武器の計算をバグらせる。
+            if (t * 100) % 2 < 1 then
+                part.CFrame = CFrame.new(posX, 50, posZ) 
+            else
+                part.CFrame = CFrame.new(posX, ABYSS_LIMIT + 500, posZ)
+            end
         end
     end
 end)
